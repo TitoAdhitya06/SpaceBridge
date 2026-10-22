@@ -1,0 +1,793 @@
+<!DOCTYPE html><html lang="id"><head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SpaceBridge - Beranda Catatan</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+    /* CSS Reset & Variable Tokens dari DESIGN.md */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    :root {
+      --bg: #F8F4EC;
+      --surface: #FFFDF9;
+      --surface-muted: #F2ECE1;
+      --surface-hover: #F5EFE4;
+      --border: #E8E0D2;
+      --border-strong: #D3C7B3;
+      --text-primary: #2E2A25;
+      --text-secondary: #5C554C;
+      --text-tertiary: #756D61;
+      --text-disabled: #A69E90;
+      --text-on-accent: #FFFDF9;
+
+      --primary-50: #FDF1E8;
+      --primary-100: #FADDC6;
+      --primary-500: #E2702F;
+      --primary-600: #BE531A;
+      --primary-700: #A54715;
+      --primary-800: #8C3C12;
+      --focus-ring: rgba(226,112,47,0.35);
+
+      --info-50: #E8F1FA;
+      --info-600: #2F6FB0;
+      --success-50: #E6F4EC;
+      --success-500: #3A9B63;
+      --success-600: #27774A;
+      --danger-50: #FBEAE8;
+      --danger-600: #C23B32;
+      --warning-50: #FDF4E3;
+      --warning-500: #E9A23B;
+      --warning-700: #8F5D12;
+
+      --radius-xs: 4px;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      --radius-xl: 20px;
+      --radius-full: 9999px;
+
+      --shadow-sm: 0 1px 2px rgba(46,42,37,0.06);
+      --shadow-md: 0 4px 12px rgba(46,42,37,0.08), 0 1px 3px rgba(46,42,37,0.05);
+      --shadow-lg: 0 12px 32px rgba(46,42,37,0.12), 0 2px 6px rgba(46,42,37,0.06);
+
+      --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background-color: var(--bg);
+      color: var(--text-primary);
+      line-height: 1.4;
+      display: flex;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 0;
+    }
+
+    /* Container HP Mobile (~390px - 412px standar Android) */
+    .mobile-frame {
+      width: 100%;
+      max-width: 412px;
+      background-color: var(--bg);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      border-left: 1px solid var(--border);
+      border-right: 1px solid var(--border);
+      padding-bottom: 96px; /* Spasi untuk bottom bar & FAB */
+    }
+
+    /* Status Bar Android Mockup */
+    .status-bar {
+      height: 36px;
+      padding: 8px 16px 4px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      user-select: none;
+    }
+    .status-bar-icons {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    /* Top App Bar (SCR-03) */
+    .top-app-bar {
+      padding: 8px 16px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .top-titles {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .app-title {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--text-primary);
+      letter-spacing: -0.01em;
+      line-height: 1.2;
+    }
+    .sync-status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+    }
+    .sync-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: var(--radius-full);
+      background-color: var(--success-500);
+      display: inline-block;
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .icon-btn {
+      width: 44px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--border);
+      background-color: var(--surface);
+      border-radius: var(--radius-md);
+      color: var(--text-secondary);
+      cursor: pointer;
+      box-shadow: var(--shadow-sm);
+      transition: background-color 150ms;
+    }
+    .icon-btn:hover {
+      background-color: var(--surface-hover);
+    }
+    .avatar-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: var(--radius-full);
+      border: 1.5px solid var(--border-strong);
+      padding: 2px;
+      background-color: var(--surface);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: var(--shadow-sm);
+    }
+    .avatar-inner {
+      width: 100%;
+      height: 100%;
+      border-radius: var(--radius-full);
+      background-color: var(--primary-100);
+      color: var(--primary-700);
+      font-size: 14px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+    }
+
+    /* Main Content Area */
+    .content {
+      padding: 0 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* Kolom Pencarian */
+    .search-bar {
+      height: 48px;
+      background-color: var(--surface);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      gap: 10px;
+      box-shadow: var(--shadow-sm);
+    }
+    .search-icon {
+      color: var(--text-tertiary);
+      display: flex;
+      align-items: center;
+    }
+    .search-input {
+      border: none;
+      outline: none;
+      background: transparent;
+      font-family: var(--font-sans);
+      font-size: 15px;
+      color: var(--text-primary);
+      width: 100%;
+    }
+    .search-input::placeholder {
+      color: var(--text-tertiary);
+      font-size: 14px;
+    }
+
+    /* Baris Chip Filter */
+    .filter-scroll {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+    .filter-scroll::-webkit-scrollbar {
+      display: none;
+    }
+    .chip {
+      height: 36px;
+      padding: 0 14px;
+      border-radius: var(--radius-full);
+      font-size: 13px;
+      font-weight: 500;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background-color: var(--surface);
+      color: var(--text-secondary);
+      user-select: none;
+      transition: background-color 150ms;
+    }
+    .chip.active {
+      background-color: var(--primary-50);
+      border-color: var(--primary-500);
+      color: var(--primary-700);
+      font-weight: 600;
+    }
+
+    /* Ringkasan Ruang (Kartu Mini Ringkas) */
+    .space-summary-card {
+      background-color: var(--surface-muted);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .summary-text {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .summary-icon {
+      color: var(--primary-500);
+      display: flex;
+    }
+    .summary-badge {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--info-600);
+      background-color: var(--info-50);
+      padding: 2px 8px;
+      border-radius: var(--radius-full);
+    }
+
+    /* Bagian Header Grid (DISEMATKAN / LAINNYA) */
+    .section-header {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-tertiary);
+      margin-top: 4px;
+      margin-bottom: -6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .section-header svg {
+      width: 14px;
+      height: 14px;
+      color: var(--primary-500);
+    }
+
+    /* Grid Masonry/2-Kolom Catatan */
+    .notes-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      align-items: start;
+    }
+
+    /* Kartu Catatan (ModernNoteCard) */
+    .note-card {
+      background-color: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 13px 12px;
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      cursor: pointer;
+      position: relative;
+      transition: transform 150ms, box-shadow 150ms;
+    }
+    .note-card:hover {
+      box-shadow: var(--shadow-md);
+      transform: translateY(-1px);
+    }
+
+    .note-header-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-tertiary);
+    }
+    .note-tag {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 1px 6px;
+      border-radius: var(--radius-xs);
+      background-color: var(--surface-muted);
+      color: var(--text-secondary);
+    }
+    .note-tag.checklist-tag {
+      background-color: var(--primary-50);
+      color: var(--primary-700);
+    }
+
+    .pin-indicator {
+      color: var(--primary-600);
+      display: flex;
+    }
+
+    .note-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-primary);
+      line-height: 1.3;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .note-snippet {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.45;
+      display: -webkit-box;
+      -webkit-line-clamp: 4;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    /* Checklist Mini di dalam Kartu */
+    .mini-checklist {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 2px;
+    }
+    .mini-check-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+      font-size: 12.5px;
+      color: var(--text-primary);
+      line-height: 1.35;
+    }
+    .check-box {
+      width: 14px;
+      height: 14px;
+      border: 1px solid var(--border-strong);
+      border-radius: 3px;
+      background: var(--surface);
+      margin-top: 2px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .mini-check-item.done .check-box {
+      background-color: var(--primary-600);
+      border-color: var(--primary-600);
+    }
+    .mini-check-item.done .check-box svg {
+      display: block;
+    }
+    .mini-check-item.done span {
+      text-decoration: line-through;
+      color: var(--text-tertiary);
+    }
+    .checklist-progress-badge {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--primary-700);
+      background-color: var(--primary-50);
+      align-self: flex-start;
+      padding: 2px 6px;
+      border-radius: var(--radius-sm);
+      margin-top: 4px;
+    }
+
+    .note-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: 4px;
+      border-top: 1px solid var(--surface-muted);
+      font-size: 11px;
+      color: var(--text-tertiary);
+      margin-top: 2px;
+    }
+    .sync-cloud-icon {
+      color: var(--success-600);
+      display: flex;
+      align-items: center;
+    }
+
+    /* Floating Action Button (FAB) */
+    .fab {
+      position: fixed;
+      bottom: 84px;
+      right: calc(50% - 190px);
+      width: 56px;
+      height: 56px;
+      border-radius: var(--radius-full);
+      background-color: var(--primary-600);
+      color: var(--text-on-accent);
+      border: none;
+      box-shadow: var(--shadow-md);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      z-index: 90;
+      transition: transform 150ms, background-color 150ms;
+    }
+    @media (max-width: 412px) {
+      .fab {
+        right: 18px;
+      }
+    }
+    .fab:hover {
+      background-color: var(--primary-700);
+      transform: scale(1.04);
+    }
+    .fab:active {
+      background-color: var(--primary-800);
+      transform: scale(0.97);
+    }
+
+    /* Floating Bottom Bar (TASK-005) */
+    .bottom-nav {
+      position: fixed;
+      bottom: 0;
+      width: 100%;
+      max-width: 412px;
+      height: 64px;
+      background-color: var(--surface);
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      padding: 0 16px;
+      z-index: 80;
+    }
+    .nav-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      color: var(--text-tertiary);
+      text-decoration: none;
+      font-size: 11.5px;
+      font-weight: 500;
+      cursor: pointer;
+      padding: 6px 14px;
+      border-radius: var(--radius-md);
+    }
+    .nav-item.active {
+      color: var(--primary-600);
+      font-weight: 600;
+    }
+    .nav-item svg {
+      width: 22px;
+      height: 22px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="mobile-frame">
+    <!-- Android Status Bar -->
+    <div class="status-bar">
+      <span class="">09:41</span>
+      <div class="status-bar-icons">
+        <!-- Signal Icon -->
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 20h20L12 4z"></path></svg>
+        <!-- Wifi Icon -->
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>
+        <!-- Battery Icon -->
+        <svg width="17" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="16" height="10" rx="2" ry="2"></rect><line x1="22" y1="11" x2="22" y2="13"></line></svg>
+      </div>
+    </div>
+
+    <!-- SCR-03: Top App Bar -->
+    <header class="top-app-bar">
+      <div class="top-titles">
+        <h1 class="app-title">Catatan</h1>
+        
+      </div>
+      <div class="top-actions">
+        <!-- View Toggle (Grid 2 Kolom) -->
+        <button class="icon-btn" aria-label="Tampilan Grid Aktif" title="Ubah tampilan">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <rect x="3" y="3" width="7" height="7" rx="1.5"></rect>
+            <rect x="14" y="3" width="7" height="7" rx="1.5"></rect>
+            <rect x="14" y="14" width="7" height="7" rx="1.5"></rect>
+            <rect x="3" y="14" width="7" height="7" rx="1.5"></rect>
+          </svg>
+        </button>
+        <!-- Avatar Akun Pengguna -->
+        <button class="avatar-btn" aria-label="Profil Akun Rina">
+          <div class="avatar-inner">RK</div>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Body Container -->
+    <main class="content">
+      <!-- Kolom Pencarian -->
+      <div class="search-bar">
+        <span class="search-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        </span>
+        <input type="text" class="search-input" placeholder="Cari judul, isi, atau label..." aria-label="Cari catatan">
+      </div>
+
+      <!-- Baris Chip Filter (Chip 'Semua' Aktif) -->
+      <div class="filter-scroll" role="tablist" aria-label="Kategori Catatan">
+        <div class="chip active" role="tab" aria-selected="true">Semua</div>
+        <div class="chip" role="tab" aria-selected="false">Catatan Teks</div>
+        <div class="chip" role="tab" aria-selected="false">Checklist</div>
+        <div class="chip" role="tab" aria-selected="false">Belanja</div>
+        <div class="chip" role="tab" aria-selected="false">Rumah</div>
+        <div class="chip" role="tab" aria-selected="false">Sekolah Anak</div>
+      </div>
+
+      <!-- Kartu Mini Ringkas Ringkasan Ruang -->
+      <div class="space-summary-card">
+        <div class="summary-text">
+          <span class="summary-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+          </span>
+          <span class=""><strong>12</strong> catatan aktif • <strong>8</strong> checklist selesai</span>
+        </div>
+        <span class="summary-badge">Drive OK</span>
+      </div>
+
+      <!-- SEKSI 1: DISEMATKAN -->
+      <div class="section-header">
+        <svg viewBox="0 0 24 24" fill="currentColor">
+          <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"></path>
+        </svg>
+        <span class="">Disematkan</span>
+      </div>
+
+      <div class="notes-grid">
+        <!-- Kartu 1 (Disematkan - Checklist Belanja) -->
+        <article class="note-card">
+          <div class="note-header-meta">
+            <span class="note-tag checklist-tag">Checklist</span>
+            <span class="pin-indicator" title="Disematkan">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"></path></svg>
+            </span>
+          </div>
+          <h2 class="note-title">Belanja Bulanan Pasar</h2>
+          <div class="mini-checklist">
+            <div class="mini-check-item done">
+              <span class="check-box">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#FFFDF9" stroke-width="3.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              </span>
+              <span class="">Beras pandan wangi 5kg</span>
+            </div>
+            <div class="mini-check-item done">
+              <span class="check-box">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#FFFDF9" stroke-width="3.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              </span>
+              <span class="">Minyak goreng 2 liter</span>
+            </div>
+            <div class="mini-check-item">
+              <span class="check-box"></span>
+              <span class="">Telur ayam 1 kilogram</span>
+            </div>
+          </div>
+          <span class="checklist-progress-badge">2/5 selesai</span>
+          <div class="note-footer">
+            <span class="">Hari ini 08:30</span>
+            <span class="sync-cloud-icon" title="Tersinkron Cloud">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>
+            </span>
+          </div>
+        </article>
+
+        <!-- Kartu 2 (Disematkan - Catatan Teks Penting) -->
+        <article class="note-card">
+          <div class="note-header-meta">
+            <span class="note-tag">Teks</span>
+            <span class="pin-indicator" title="Disematkan">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"></path></svg>
+            </span>
+          </div>
+          <h2 class="note-title">Jadwal Vaksinasi &amp; Posyandu</h2>
+          <p class="note-snippet">Jumat pekan depan jam 08:30 di Balai RW 04. Bawa buku KIA merah anak, kartu BPJS keluarga, dan fotokopi KK.</p>
+          <div class="note-footer">
+            <span class="">Kemarin 19:10</span>
+            <span class="sync-cloud-icon" title="Tersinkron Cloud">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>
+            </span>
+          </div>
+        </article>
+      </div>
+
+      <!-- SEKSI 2: LAINNYA -->
+      <div class="section-header">
+        <span class="">Lainnya</span>
+      </div>
+
+      <div class="notes-grid">
+        <!-- Kartu 3 (Lainnya - Catatan Teks Rapat Sekolah) -->
+        <article class="note-card">
+          <div class="note-header-meta">
+            <span class="note-tag">Teks</span>
+          </div>
+          <h2 class="note-title">Rapat Komite Sekolah</h2>
+          <p class="note-snippet">Hasil rapat anggaran karya wisata kelas 5: biaya per siswa Rp180.000, batas pelunasan akhir bulan via rekening komite.</p>
+          <div class="note-footer">
+            <span class="">20 Okt 14:15</span>
+            <span class="sync-cloud-icon" title="Tersinkron Cloud">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>
+            </span>
+          </div>
+        </article>
+
+        <!-- Kartu 4 (Lainnya - Checklist Perawatan Rumah) -->
+        <article class="note-card">
+          <div class="note-header-meta">
+            <span class="note-tag checklist-tag">Checklist</span>
+          </div>
+          <h2 class="note-title">Perawatan Rutin Rumah</h2>
+          <div class="mini-checklist">
+            <div class="mini-check-item done">
+              <span class="check-box">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#FFFDF9" stroke-width="3.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              </span>
+              <span class="">Ganti filter dispenser</span>
+            </div>
+            <div class="mini-check-item">
+              <span class="check-box"></span>
+              <span class="">Bersihkan AC kamar utama</span>
+            </div>
+            <div class="mini-check-item">
+              <span class="check-box"></span>
+              <span class="">Cek genteng talang air</span>
+            </div>
+          </div>
+          <span class="checklist-progress-badge">1/4 selesai</span>
+          <div class="note-footer">
+            <span class="">19 Okt 11:20</span>
+            <span class="sync-cloud-icon" title="Tersinkron Cloud">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>
+            </span>
+          </div>
+        </article>
+
+        <!-- Kartu 5 (Lainnya - Catatan Teks Resep) -->
+        <article class="note-card">
+          <div class="note-header-meta">
+            <span class="note-tag">Teks</span>
+          </div>
+          <h2 class="note-title">Resep Opor Ayam Ibu</h2>
+          <p class="note-snippet">Ayam kampung 1 ekor potong 8, santan sedang 800ml, lengkuas memarkan, daun salam 3 lembar, serai 2 batang, kemiri sangrai halus.</p>
+          <div class="note-footer">
+            <span class="">18 Okt 16:45</span>
+            <span class="sync-cloud-icon" title="Tersinkron Cloud">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>
+            </span>
+          </div>
+        </article>
+
+        <!-- Kartu 6 (Lainnya - Checklist Persiapan Liburan) -->
+        <article class="note-card">
+          <div class="note-header-meta">
+            <span class="note-tag checklist-tag">Checklist</span>
+          </div>
+          <h2 class="note-title">Perlengkapan Liburan</h2>
+          <div class="mini-checklist">
+            <div class="mini-check-item done">
+              <span class="check-box">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#FFFDF9" stroke-width="3.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              </span>
+              <span class="">Tiket kereta &amp; kartu identitas</span>
+            </div>
+            <div class="mini-check-item done">
+              <span class="check-box">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#FFFDF9" stroke-width="3.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              </span>
+              <span class="">Kotak obat &amp; vitamin anak</span>
+            </div>
+            <div class="mini-check-item">
+              <span class="check-box"></span>
+              <span class="">Charger &amp; powerbank 20k</span>
+            </div>
+          </div>
+          <span class="checklist-progress-badge">2/6 selesai</span>
+          <div class="note-footer">
+            <span class="">17 Okt 09:10</span>
+            <span class="sync-cloud-icon" title="Tersinkron Cloud">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>
+            </span>
+          </div>
+        </article>
+      </div>
+    </main>
+
+    <!-- FAB: Tombol Tambah Catatan Cepat (#BE531A) -->
+    <button class="fab" aria-label="Buat Catatan Baru" title="Tambah Catatan">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="12" y1="5" x2="12" y2="19"></line>
+        <line x1="5" y1="12" x2="19" y2="12"></line>
+      </svg>
+    </button>
+
+    <!-- Floating Bottom Navigation Bar (Catatan & Berkas Drive) -->
+    <nav class="bottom-nav" aria-label="Navigasi Utama">
+      <div class="nav-item active" role="button" tabindex="0">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+          <polyline points="14 2 14 8 20 8"></polyline>
+          <line x1="16" y1="13" x2="8" y2="13"></line>
+          <line x1="16" y1="17" x2="8" y2="17"></line>
+          <polyline points="10 9 9 9 8 9"></polyline>
+        </svg>
+        <span class="">Catatan</span>
+      </div>
+      <div class="nav-item" role="button" tabindex="0">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+        </svg>
+        <span class="">Berkas Drive</span>
+      </div>
+    </nav>
+  </div>
+
+
+
+
+
+</body></html>

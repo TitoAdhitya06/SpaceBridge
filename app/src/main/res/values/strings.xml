@@ -1,0 +1,29 @@
+<resources>
+    <string name="app_name">SpaceBridge</string>
+
+    <!-- Login Screen (SCR-01) -->
+    <string name="login_title">SpaceBridge</string>
+    <string name="login_subtitle">Catatan pribadi keluarga dan arsip berkas aman di Google Drive Anda.</string>
+    <string name="login_continue_google">Lanjutkan dengan Google</string>
+    <string name="login_connecting">Menghubungkan akun...</string>
+    <string name="login_archival_badge">ARSIP AMAN</string>
+    <string name="login_privacy_badge">Enkripsi Akun Google • Ruang Pribadi Terisolasi</string>
+    <string name="login_privacy_notice">Data catatan tersimpan di partisi pribadi Firebase. Hanya akun Anda yang dapat membaca dan mengubah catatan.</string>
+    <string name="login_error_network">Gagal masuk. Periksa koneksi internet Anda.</string>
+    <string name="login_error_generic">Terjadi kesalahan saat masuk. Silakan coba lagi.</string>
+
+    <!-- Drive Onboarding Screen (SCR-02) -->
+    <string name="drive_onboarding_title">Hubungkan Google Drive</string>
+    <string name="drive_onboarding_step">Langkah 2 dari 3</string>
+    <string name="drive_onboarding_step_badge">Integrasi Cloud</string>
+    <string name="drive_onboarding_desc">SpaceBridge akan membuat satu folder khusus bernama ‘SpaceBridge’ di Drive Anda. Aplikasi hanya dapat mengakses berkas yang Anda unggah melalui aplikasi ini, bukan berkas pribadi Anda yang lain.</string>
+    <string name="drive_onboarding_point_1">Menyimpan berkas lampiran dan dokumen secara utuh.</string>
+    <string name="drive_onboarding_point_2">Menggunakan kuota Google Drive akun Anda sendiri.</string>
+    <string name="drive_onboarding_point_3">Hak akses terbatas pada folder aplikasi SpaceBridge.</string>
+    <string name="drive_onboarding_auto_sync">Sinkronisasi Otomatis</string>
+    <string name="drive_onboarding_auto_sync_desc">Cadangkan arsip transaksi setiap saat</string>
+    <string name="drive_onboarding_btn_connect">Hubungkan Drive Sekarang</string>
+    <string name="drive_onboarding_btn_skip">Lewati untuk Sekarang</string>
+    <string name="drive_onboarding_connecting">Menghubungkan Akun...</string>
+    <string name="drive_onboarding_security_footer">Kerahasiaan data dilindungi enkripsi sistem archival</string>
+</resources>

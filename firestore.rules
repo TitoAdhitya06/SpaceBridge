@@ -1,0 +1,120 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+    function isStr(v, min, max) {
+      return v is string && v.size() >= min && v.size() <= max;
+    }
+    function isStrOrNull(v, max) {
+      return v == null || (v is string && v.size() <= max);
+    }
+    function isTsOrNull(v) {
+      return v == null || v is timestamp;
+    }
+    function exactKeys(d, keys) {
+      return d.keys().hasOnly(keys) && d.keys().hasAll(keys);
+    }
+    function createdAtOk(d) {
+      return d.createdAt is timestamp && d.createdAt <= request.time;
+    }
+    function createdAtUnchanged(d) {
+      return d.createdAt == resource.data.createdAt;
+    }
+
+    match /users/{uid} {
+      function validProfile(d) {
+        return exactKeys(d, ['displayName','email','photoUrl','driveFolderId',
+                             'migratedV3At','createdAt','lastSeenAt','schemaVersion'])
+          && isStr(d.displayName, 0, 100)
+          && isStr(d.email, 0, 200)
+          && isStrOrNull(d.photoUrl, 2000)
+          && isStrOrNull(d.driveFolderId, 200)
+          && isTsOrNull(d.migratedV3At)
+          && d.lastSeenAt is timestamp
+          && d.schemaVersion == 1;
+      }
+
+      allow get, delete: if isOwner(uid);
+      allow list: if false;
+      allow create: if isOwner(uid) && validProfile(request.resource.data)
+                    && createdAtOk(request.resource.data);
+      allow update: if isOwner(uid) && validProfile(request.resource.data)
+                    && createdAtUnchanged(request.resource.data);
+
+      match /notes/{noteId} {
+        function validNote(d) {
+          return exactKeys(d, ['type','title','body','items','pinned','labelIds',
+                               'attachmentIds','status','trashedAt','createdAt',
+                               'updatedAt','schemaVersion'])
+            && d.type in ['text','checklist']
+            && isStr(d.title, 0, 200)
+            && isStr(d.body, 0, 20000)
+            && d.items is list && d.items.size() <= 500
+            && d.pinned is bool
+            && d.labelIds is list && d.labelIds.size() <= 10
+            && d.attachmentIds is list && d.attachmentIds.size() <= 20
+            && d.status in ['active','archived','trashed']
+            && isTsOrNull(d.trashedAt)
+            && d.updatedAt == request.time
+            && d.schemaVersion == 1;
+        }
+        allow read, delete: if isOwner(uid);
+        allow create: if isOwner(uid) && validNote(request.resource.data)
+                      && createdAtOk(request.resource.data);
+        allow update: if isOwner(uid) && validNote(request.resource.data)
+                      && createdAtUnchanged(request.resource.data);
+      }
+
+      match /files/{fileId} {
+        function validFile(d) {
+          return exactKeys(d, ['name','mimeType','sizeBytes','category','source',
+                               'driveFileId','webViewLink','externalUrl','md5Checksum',
+                               'status','uploadDeviceId','pendingDriveOp','shared',
+                               'sharePermissionId','trashedAt','createdAt','updatedAt',
+                               'schemaVersion'])
+            && isStr(d.name, 1, 255)
+            && isStr(d.mimeType, 0, 255)
+            && (d.sizeBytes == null || (d.sizeBytes is int && d.sizeBytes >= 0))
+            && d.category in ['document','image','spreadsheet','other']
+            && d.source in ['drive','external_link']
+            && isStrOrNull(d.driveFileId, 200)
+            && isStrOrNull(d.webViewLink, 2000)
+            && isStrOrNull(d.externalUrl, 2000)
+            && isStrOrNull(d.md5Checksum, 64)
+            && d.status in ['uploading','ready','failed','missing','trashed']
+            && isStrOrNull(d.uploadDeviceId, 100)
+            && (d.pendingDriveOp == null
+                || d.pendingDriveOp in ['trash','untrash','delete','rename'])
+            && d.shared is bool
+            && isStrOrNull(d.sharePermissionId, 200)
+            && isTsOrNull(d.trashedAt)
+            && d.updatedAt == request.time
+            && d.schemaVersion == 1;
+        }
+        allow read, delete: if isOwner(uid);
+        allow create: if isOwner(uid) && validFile(request.resource.data)
+                      && createdAtOk(request.resource.data);
+        allow update: if isOwner(uid) && validFile(request.resource.data)
+                      && (createdAtUnchanged(request.resource.data)
+                          || !('schemaVersion' in resource.data));
+      }
+
+      match /labels/{labelId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+          && exactKeys(request.resource.data, ['name','createdAt','updatedAt','schemaVersion'])
+          && isStr(request.resource.data.name, 1, 40)
+          && request.resource.data.createdAt is timestamp
+          && request.resource.data.updatedAt == request.time
+          && request.resource.data.schemaVersion == 1;
+      }
+
+      match /catatan/{legacyId} {
+        allow read, delete: if isOwner(uid);
+      }
+    }
+  }
+}

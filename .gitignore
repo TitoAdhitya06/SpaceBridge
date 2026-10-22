@@ -69,3 +69,7 @@ Thumbs.db
 ui.xml
 test_screen.png
 *.dump.txt
+
+# Internal design documents & specifications
+docs/
+/docs/

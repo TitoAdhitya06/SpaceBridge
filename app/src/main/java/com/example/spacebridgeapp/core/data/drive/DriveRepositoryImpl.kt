@@ -16,6 +16,12 @@ class DriveRepositoryImpl(
     private val firestoreProvider: (() -> FirebaseFirestore)? = null,
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : DriveRepository {
+    @Volatile
+    private var cachedRootFolderId: String? = null
+
+    @Volatile
+    private var cachedRootFolderUid: String? = null
+
     private suspend fun <T> withAuth(block: suspend (authHeader: String) -> T): Result<T> =
         withContext(dispatcher) {
             val token =
@@ -69,10 +75,18 @@ class DriveRepositoryImpl(
 
     override suspend fun getOrCreateRootFolder(): Result<String> =
         withContext(dispatcher) {
+            val currentUid = auth?.currentUser?.uid
+            val cachedId = cachedRootFolderId
+            if (!cachedId.isNullOrBlank() && cachedRootFolderUid == currentUid) {
+                return@withContext Result.success(cachedId)
+            }
+
             val findResult = findRootFolder()
             findResult.fold(
                 onSuccess = { existingId ->
                     if (!existingId.isNullOrBlank()) {
+                        cachedRootFolderId = existingId
+                        cachedRootFolderUid = currentUid
                         updateFirestoreFolderId(existingId)
                         Result.success(existingId)
                     } else {
@@ -93,6 +107,8 @@ class DriveRepositoryImpl(
                                 created.id
                             }
                         createResult.onSuccess { newId ->
+                            cachedRootFolderId = newId
+                            cachedRootFolderUid = currentUid
                             updateFirestoreFolderId(newId)
                         }
                         createResult

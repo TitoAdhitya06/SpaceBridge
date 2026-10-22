@@ -182,14 +182,6 @@ class FilesRepositoryImpl(
 
             try {
                 localUriPrefs.edit().putString(fileId, uri.toString()).apply()
-                firestore
-                    .collection("users")
-                    .document(uid)
-                    .collection("files")
-                    .document(fileId)
-                    .set(newFile.toFirestoreMap())
-                    .await()
-
                 val workRequest =
                     UploadWorker.createWorkRequest(
                         fileId = fileId,
@@ -206,6 +198,15 @@ class FilesRepositoryImpl(
                     ExistingWorkPolicy.KEEP,
                     workRequest,
                 )
+
+                firestore
+                    .collection("users")
+                    .document(uid)
+                    .collection("files")
+                    .document(fileId)
+                    .set(newFile.toFirestoreMap())
+                    .await()
+
                 queued++
             } catch (e: CancellationException) {
                 throw e
@@ -562,7 +563,7 @@ class FilesRepositoryImpl(
                     val fileIdTag = info.tags.firstOrNull { it.startsWith("upload-") }?.removePrefix("upload-")
                     if (fileIdTag != null) {
                         if (info.state == WorkInfo.State.RUNNING || info.state == WorkInfo.State.ENQUEUED) {
-                            val progress = info.progress.getFloat("progress", 0.05f)
+                            val progress = info.progress.getFloat("progress", 0f)
                             progressMap[fileIdTag] = progress
                         }
                     }

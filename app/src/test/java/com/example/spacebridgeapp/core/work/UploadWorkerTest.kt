@@ -3,8 +3,11 @@ package com.example.spacebridgeapp.core.work
 import androidx.work.BackoffPolicy
 import androidx.work.NetworkType
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.ByteArrayInputStream
+import java.io.InputStream
 import java.util.concurrent.TimeUnit
 
 class UploadWorkerTest {
@@ -86,5 +89,33 @@ class UploadWorkerTest {
         val spec = request.workSpec
         assertEquals(NetworkType.CONNECTED, spec.constraints.requiredNetworkType)
         assertTrue(request.tags.contains("upload-test-file-id-789"))
+    }
+
+    @Test
+    fun `test skipFully advances stream even when skip returns zero`() {
+        val data = ByteArray(100) { it.toByte() }
+        val zeroSkipStream =
+            object : InputStream() {
+                private val delegate = ByteArrayInputStream(data)
+
+                override fun read(): Int = delegate.read()
+
+                override fun read(
+                    b: ByteArray,
+                    off: Int,
+                    len: Int,
+                ): Int = delegate.read(b, off, len)
+
+                override fun skip(n: Long): Long = 0L
+            }
+
+        assertTrue(UploadWorker.skipFully(zeroSkipStream, 40L))
+        assertEquals(40, zeroSkipStream.read())
+    }
+
+    @Test
+    fun `test skipFully returns false when stream ends before requested offset`() {
+        val shortStream = ByteArrayInputStream(ByteArray(10))
+        assertFalse(UploadWorker.skipFully(shortStream, 25L))
     }
 }

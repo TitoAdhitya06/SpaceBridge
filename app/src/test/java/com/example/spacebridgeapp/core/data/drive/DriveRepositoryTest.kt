@@ -84,15 +84,20 @@ class DriveRepositoryTest {
     @Test
     fun `test getOrCreateRootFolder returns existing root folder if exists`() =
         runTest(testDispatcher) {
+            var listCallCount = 0
             fakeDriveApi.listFilesHandler = { _, _, _, _, _ ->
+                listCallCount++
                 DriveFileList(files = listOf(DriveFileItem(id = "existing-folder-id")))
             }
 
-            val result = repository.getOrCreateRootFolder()
+            val result1 = repository.getOrCreateRootFolder()
+            val result2 = repository.getOrCreateRootFolder()
             advanceUntilIdle()
 
-            assertTrue(result.isSuccess)
-            assertEquals("existing-folder-id", result.getOrNull())
+            assertTrue(result1.isSuccess)
+            assertEquals("existing-folder-id", result1.getOrNull())
+            assertEquals("existing-folder-id", result2.getOrNull())
+            assertEquals(1, listCallCount)
         }
 
     @Test

@@ -27,15 +27,20 @@ import com.example.spacebridgeapp.core.data.drive.DriveQuotaExceededException
 import com.example.spacebridgeapp.core.data.drive.DriveRepository
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import okio.BufferedSink
 import org.json.JSONObject
 import java.io.IOException
+import java.io.InputStream
 import java.util.concurrent.TimeUnit
 
 private val Context.uploadSessionDataStore by preferencesDataStore(name = "spacebridge_upload_sessions")
@@ -60,148 +65,175 @@ class UploadWorker @JvmOverloads constructor(
         get() = injectedFirestore ?: appContainer?.firestore
 
     private val httpClient: OkHttpClient
-        get() =
-            injectedOkHttpClient ?: OkHttpClient
-                .Builder()
-                .connectTimeout(30, TimeUnit.SECONDS)
-                .readTimeout(60, TimeUnit.SECONDS)
-                .writeTimeout(60, TimeUnit.SECONDS)
-                .build()
+        get() = injectedOkHttpClient ?: defaultHttpClient
 
-    override suspend fun doWork(): Result {
-        val fileId = inputData.getString(KEY_FILE_ID) ?: return Result.failure()
-        val uriString = inputData.getString(KEY_FILE_URI) ?: return Result.failure()
-        val fileName = inputData.getString(KEY_FILE_NAME) ?: "Berkas"
-        val mimeType = inputData.getString(KEY_MIME_TYPE) ?: "application/octet-stream"
-        val totalBytes = inputData.getLong(KEY_TOTAL_BYTES, 0L)
-        val userId = inputData.getString(KEY_USER_ID) ?: return Result.failure()
+    override suspend fun doWork(): Result =
+        withContext(Dispatchers.IO) {
+            val fileId = inputData.getString(KEY_FILE_ID) ?: return@withContext Result.failure()
+            val uriString = inputData.getString(KEY_FILE_URI) ?: return@withContext Result.failure()
+            val fileName = inputData.getString(KEY_FILE_NAME) ?: "Berkas"
+            val mimeType = inputData.getString(KEY_MIME_TYPE) ?: "application/octet-stream"
+            val totalBytes = inputData.getLong(KEY_TOTAL_BYTES, 0L)
+            val userId = inputData.getString(KEY_USER_ID) ?: return@withContext Result.failure()
 
-        val uri = Uri.parse(uriString)
+            val uri = Uri.parse(uriString)
 
-        android.util.Log.d("UploadWorker", "doWork started: fileId=$fileId, uri=$uriString, size=$totalBytes, user=$userId")
+            android.util.Log.d(
+                "UploadWorker",
+                "doWork started: fileId=$fileId, uri=$uriString, size=$totalBytes, user=$userId",
+            )
 
-        // Verifikasi izin baca berkas asli
-        try {
-            applicationContext.contentResolver.openInputStream(uri)?.close()
-            android.util.Log.d("UploadWorker", "URI readable")
-        } catch (e: Exception) {
-            android.util.Log.e("UploadWorker", "URI not readable", e)
-            updateFirestoreFileStatus(userId, fileId, "failed")
-            return Result.failure()
-        }
-
-        // Tampilkan foreground notification awal
-        val notificationId = fileId.hashCode()
-        try {
-            setForeground(createForegroundInfo(fileName, 0, notificationId))
-        } catch (_: Exception) {
-        }
-        setProgress(workDataOf("progress" to 0.05f))
-
-        // Dapatkan atau inisiasi sesi resumable upload
-        val sessionUrl =
-            when (val initResult = getOrInitiateSession(fileId, fileName, mimeType, totalBytes, userId)) {
-                is SessionInitResult.Success -> initResult.sessionUrl
-                is SessionInitResult.Fatal -> {
-                    android.util.Log.e("UploadWorker", "Fatal session init error: ${initResult.message}")
-                    updateFirestoreFileStatus(userId, fileId, "failed")
-                    showErrorNotification(initResult.message, notificationId)
-                    return Result.failure()
-                }
-                is SessionInitResult.Retryable -> {
-                    android.util.Log.w("UploadWorker", "Retryable session init error, attempt=$runAttemptCount")
-                    if (runAttemptCount < 3) {
-                        return Result.retry()
-                    } else {
-                        updateFirestoreFileStatus(userId, fileId, "failed")
-                        showErrorNotification("Gagal mengunggah berkas ke Google Drive", notificationId)
-                        return Result.failure()
-                    }
-                }
-            }
-
-        android.util.Log.d("UploadWorker", "sessionUrl obtained: $sessionUrl")
-
-        // Cek posisi byte terakhir yang tersimpan pada sesi
-        val startByte = queryCurrentPosition(sessionUrl, totalBytes)
-        if (startByte < 0) {
-            // Sesi 404 atau rusak, hapus sesi lama dan coba ulang
-            android.util.Log.w("UploadWorker", "startByte < 0, clearing session and retrying")
-            clearSavedSessionUrl(fileId)
-            return Result.retry()
-        }
-
-        // Unggah bertahap (chunked upload) per 8 MB
-        var currentOffset = startByte
-        while (currentOffset < totalBytes) {
-            val endOffset = minOf(currentOffset + CHUNK_SIZE - 1, totalBytes - 1)
-            val chunkLength = (endOffset - currentOffset + 1).toInt()
-
-            val chunkBytes = readChunk(uri, currentOffset, chunkLength)
-            if (chunkBytes == null || chunkBytes.size != chunkLength) {
+            // Verifikasi izin baca berkas asli
+            try {
+                applicationContext.contentResolver.openInputStream(uri)?.close()
+                android.util.Log.d("UploadWorker", "URI readable")
+            } catch (e: Exception) {
+                android.util.Log.e("UploadWorker", "URI not readable", e)
                 updateFirestoreFileStatus(userId, fileId, "failed")
-                return Result.failure()
+                return@withContext Result.failure()
             }
 
-            val chunkResult =
-                uploadChunk(
-                    sessionUrl = sessionUrl,
-                    startByte = currentOffset,
-                    endByte = endOffset,
-                    totalBytes = totalBytes,
-                    chunk = chunkBytes,
-                    mimeType = mimeType,
-                )
+            // Tampilkan foreground notification awal
+            val notificationId = fileId.hashCode()
+            try {
+                setForeground(createForegroundInfo(fileName, 0, notificationId))
+            } catch (_: Exception) {
+            }
 
-            when (chunkResult) {
-                is ChunkResult.Incomplete -> {
-                    currentOffset = chunkResult.nextByte
-                    val progressRatio = (currentOffset.toFloat() / totalBytes).coerceIn(0.05f, 0.95f)
-                    val progressPercent = ((currentOffset.toFloat() / totalBytes) * 100).toInt()
-                    setProgress(workDataOf("progress" to progressRatio))
-                    try {
-                        setForeground(createForegroundInfo(fileName, progressPercent, notificationId))
-                    } catch (_: Exception) {
+            // Dapatkan atau inisiasi sesi resumable upload
+            var sessionSuccess =
+                when (val initResult = getOrInitiateSession(fileId, fileName, mimeType, totalBytes, userId)) {
+                    is SessionInitResult.Success -> initResult
+                    is SessionInitResult.Fatal -> {
+                        android.util.Log.e("UploadWorker", "Fatal session init error: ${initResult.message}")
+                        updateFirestoreFileStatus(userId, fileId, "failed")
+                        showErrorNotification(initResult.message, notificationId)
+                        return@withContext Result.failure()
+                    }
+                    is SessionInitResult.Retryable -> {
+                        android.util.Log.w("UploadWorker", "Retryable session init error, attempt=$runAttemptCount")
+                        if (runAttemptCount < 3) {
+                            return@withContext Result.retry()
+                        } else {
+                            updateFirestoreFileStatus(userId, fileId, "failed")
+                            showErrorNotification("Gagal mengunggah berkas ke Google Drive", notificationId)
+                            return@withContext Result.failure()
+                        }
                     }
                 }
-                is ChunkResult.Success -> {
-                    setProgress(workDataOf("progress" to 1.0f))
-                    updateFirestoreFileSuccess(userId, fileId, chunkResult.driveFileId, chunkResult.webViewLink)
-                    clearSavedSessionUrl(fileId)
-                    showSuccessNotification(fileName, notificationId)
-                    return Result.success()
+
+            var sessionUrl = sessionSuccess.sessionUrl
+            android.util.Log.d("UploadWorker", "sessionUrl obtained: $sessionUrl, isResumed=${sessionSuccess.isResumed}")
+
+            // Cek posisi byte terakhir hanya jika melanjutkan sesi lama
+            var startByte =
+                if (sessionSuccess.isResumed) {
+                    queryCurrentPosition(sessionUrl, totalBytes)
+                } else {
+                    0L
                 }
-                is ChunkResult.QuotaExceeded -> {
-                    updateFirestoreFileStatus(userId, fileId, "failed")
-                    showErrorNotification("Penyimpanan Google Drive penuh", notificationId)
-                    return Result.failure()
-                }
-                is ChunkResult.NeedsConsent -> {
-                    updateFirestoreFileStatus(userId, fileId, "failed")
-                    showErrorNotification("Izin Google Drive dibutuhkan", notificationId)
-                    return Result.failure()
-                }
-                is ChunkResult.Retryable -> {
-                    return Result.retry()
-                }
-                is ChunkResult.FatalError -> {
-                    if (runAttemptCount < 3) {
-                        return Result.retry()
+
+            if (startByte < 0L) {
+                // Sesi lama sudah kedaluwarsa (404), buat sesi baru langsung tanpa menunggu backoff retry
+                android.util.Log.w("UploadWorker", "startByte < 0, clearing expired session and creating new session")
+                clearSavedSessionUrl(fileId)
+                sessionSuccess =
+                    when (val reinitResult = getOrInitiateSession(fileId, fileName, mimeType, totalBytes, userId)) {
+                        is SessionInitResult.Success -> reinitResult
+                        is SessionInitResult.Fatal -> {
+                            updateFirestoreFileStatus(userId, fileId, "failed")
+                            showErrorNotification(reinitResult.message, notificationId)
+                            return@withContext Result.failure()
+                        }
+                        is SessionInitResult.Retryable -> return@withContext Result.retry()
                     }
-                    updateFirestoreFileStatus(userId, fileId, "failed")
-                    return Result.failure()
+                sessionUrl = sessionSuccess.sessionUrl
+                startByte = 0L
+            }
+
+            val initialRatio =
+                if (totalBytes > 0L) {
+                    (startByte.toFloat() / totalBytes).coerceIn(0f, 0.99f)
+                } else {
+                    0f
+                }
+            setProgress(workDataOf("progress" to initialRatio))
+
+            // Alirkan isi berkas secara berkesinambungan dalam satu stream PUT resumable
+            var currentOffset = startByte
+            while (currentOffset < totalBytes) {
+                val chunkResult =
+                    streamRemainingBytes(
+                        uri = uri,
+                        sessionUrl = sessionUrl,
+                        startByte = currentOffset,
+                        totalBytes = totalBytes,
+                        mimeType = mimeType,
+                        fileName = fileName,
+                        notificationId = notificationId,
+                    )
+
+                when (chunkResult) {
+                    is ChunkResult.Incomplete -> {
+                        currentOffset = chunkResult.nextByte
+                        val progressRatio = (currentOffset.toFloat() / totalBytes).coerceIn(0f, 0.99f)
+                        val progressPercent = ((currentOffset * 100) / totalBytes).toInt().coerceIn(0, 99)
+                        setProgress(workDataOf("progress" to progressRatio))
+                        updateProgressNotification(fileName, progressPercent, notificationId)
+                    }
+                    is ChunkResult.Success -> {
+                        setProgress(workDataOf("progress" to 1.0f))
+                        updateFirestoreFileSuccess(userId, fileId, chunkResult.driveFileId, chunkResult.webViewLink)
+                        clearSavedSessionUrl(fileId)
+                        showSuccessNotification(fileName, notificationId)
+                        return@withContext Result.success()
+                    }
+                    is ChunkResult.QuotaExceeded -> {
+                        updateFirestoreFileStatus(userId, fileId, "failed")
+                        showErrorNotification("Penyimpanan Google Drive penuh", notificationId)
+                        return@withContext Result.failure()
+                    }
+                    is ChunkResult.NeedsConsent -> {
+                        updateFirestoreFileStatus(userId, fileId, "failed")
+                        showErrorNotification("Izin Google Drive dibutuhkan", notificationId)
+                        return@withContext Result.failure()
+                    }
+                    is ChunkResult.Retryable -> {
+                        val queriedOffset = queryCurrentPosition(sessionUrl, totalBytes)
+                        if (queriedOffset > currentOffset && queriedOffset < totalBytes) {
+                            currentOffset = queriedOffset
+                            val progressRatio = (currentOffset.toFloat() / totalBytes).coerceIn(0f, 0.99f)
+                            setProgress(workDataOf("progress" to progressRatio))
+                        } else {
+                            return@withContext Result.retry()
+                        }
+                    }
+                    is ChunkResult.FatalError -> {
+                        if (runAttemptCount < 3) {
+                            return@withContext Result.retry()
+                        }
+                        updateFirestoreFileStatus(userId, fileId, "failed")
+                        return@withContext Result.failure()
+                    }
                 }
             }
+
+            setProgress(workDataOf("progress" to 1.0f))
+            showSuccessNotification(fileName, notificationId)
+            Result.success()
         }
-
-        showSuccessNotification(fileName, notificationId)
-        return Result.success()
-    }
 
     private sealed interface SessionInitResult {
-        data class Success(val sessionUrl: String) : SessionInitResult
-        data class Fatal(val message: String) : SessionInitResult
-        object Retryable : SessionInitResult
+        data class Success(
+            val sessionUrl: String,
+            val isResumed: Boolean,
+        ) : SessionInitResult
+
+        data class Fatal(
+            val message: String,
+        ) : SessionInitResult
+
+        data object Retryable : SessionInitResult
     }
 
     private suspend fun getOrInitiateSession(
@@ -213,13 +245,14 @@ class UploadWorker @JvmOverloads constructor(
     ): SessionInitResult {
         val saved = getSavedSessionUrl(fileId)
         if (!saved.isNullOrBlank()) {
-            return SessionInitResult.Success(saved)
+            return SessionInitResult.Success(saved, isResumed = true)
         }
 
-        val repository = driveRepository ?: run {
-            android.util.Log.e("UploadWorker", "getOrInitiateSession: driveRepository is null!")
-            return SessionInitResult.Retryable
-        }
+        val repository =
+            driveRepository ?: run {
+                android.util.Log.e("UploadWorker", "getOrInitiateSession: driveRepository is null!")
+                return SessionInitResult.Retryable
+            }
         val rootFolderResult = repository.getOrCreateRootFolder()
         val rootFolderId = rootFolderResult.getOrNull()
         if (rootFolderId.isNullOrBlank()) {
@@ -246,7 +279,7 @@ class UploadWorker @JvmOverloads constructor(
         val sessionUrl = sessionResult.getOrNull()
         if (!sessionUrl.isNullOrBlank()) {
             saveSessionUrl(fileId, sessionUrl)
-            return SessionInitResult.Success(sessionUrl)
+            return SessionInitResult.Success(sessionUrl, isResumed = false)
         } else {
             val ex = sessionResult.exceptionOrNull()
             android.util.Log.e("UploadWorker", "createResumableUploadSession failed: $ex", ex)
@@ -289,22 +322,77 @@ class UploadWorker @JvmOverloads constructor(
         }
     }
 
-    private fun uploadChunk(
+    private fun streamRemainingBytes(
+        uri: Uri,
         sessionUrl: String,
         startByte: Long,
-        endByte: Long,
         totalBytes: Long,
-        chunk: ByteArray,
         mimeType: String,
+        fileName: String,
+        notificationId: Int,
     ): ChunkResult {
-        val body = chunk.toRequestBody(mimeType.toMediaType())
+        val endByte = totalBytes - 1
+        val contentLength = totalBytes - startByte
+        var lastReportedPercent = if (totalBytes > 0L) ((startByte * 100) / totalBytes).toInt() else 0
+        var lastProgressUpdateMs = 0L
+        var lastNotificationUpdateMs = 0L
+
+        val body =
+            object : RequestBody() {
+                override fun contentType() = mimeType.toMediaType()
+
+                override fun contentLength(): Long = contentLength
+
+                override fun isOneShot(): Boolean = true
+
+                override fun writeTo(sink: BufferedSink) {
+                    val stream =
+                        applicationContext.contentResolver.openInputStream(uri)
+                            ?: throw IOException("Gagal membuka berkas untuk diunggah")
+                    stream.use { input ->
+                        if (!skipFully(input, startByte)) {
+                            throw IOException("Gagal melompati posisi awal berkas")
+                        }
+                        val buffer = ByteArray(STREAM_BUFFER_SIZE)
+                        var bytesSent = 0L
+                        while (bytesSent < contentLength) {
+                            val toRead = minOf(buffer.size.toLong(), contentLength - bytesSent).toInt()
+                            val read = input.read(buffer, 0, toRead)
+                            if (read == -1) break
+                            sink.write(buffer, 0, read)
+                            bytesSent += read
+
+                            if (totalBytes > 0L) {
+                                val currentTotal = startByte + bytesSent
+                                val percent = ((currentTotal * 100) / totalBytes).toInt().coerceIn(0, 99)
+                                val now = System.currentTimeMillis()
+                                if (percent > lastReportedPercent && now - lastProgressUpdateMs >= PROGRESS_THROTTLE_MS) {
+                                    lastReportedPercent = percent
+                                    lastProgressUpdateMs = now
+                                    val ratio = (currentTotal.toFloat() / totalBytes).coerceIn(0f, 0.99f)
+                                    setProgressAsync(workDataOf("progress" to ratio))
+                                    if (now - lastNotificationUpdateMs >= NOTIFICATION_THROTTLE_MS) {
+                                        lastNotificationUpdateMs = now
+                                        updateProgressNotification(fileName, percent, notificationId)
+                                    }
+                                }
+                            }
+                        }
+                        sink.flush()
+                        if (bytesSent < contentLength) {
+                            throw IOException("Ukuran berkas yang terbaca kurang dari total ukuran yang diharapkan")
+                        }
+                    }
+                }
+            }
+
         val request =
             Request
                 .Builder()
                 .url(sessionUrl)
                 .put(body)
                 .header("Content-Range", "bytes $startByte-$endByte/$totalBytes")
-                .header("Content-Length", chunk.size.toString())
+                .header("Content-Length", contentLength.toString())
                 .build()
 
         return try {
@@ -312,8 +400,12 @@ class UploadWorker @JvmOverloads constructor(
                 when (response.code) {
                     308 -> {
                         val range = response.header("Range")
-                        val nextByte = parseNextByteFromRange(range).coerceAtLeast(endByte + 1)
-                        ChunkResult.Incomplete(nextByte)
+                        val nextByte = parseNextByteFromRange(range).coerceAtLeast(startByte)
+                        if (nextByte <= startByte) {
+                            ChunkResult.Retryable
+                        } else {
+                            ChunkResult.Incomplete(nextByte)
+                        }
                     }
                     200, 201 -> {
                         val bodyStr = response.body?.string().orEmpty()
@@ -342,32 +434,6 @@ class UploadWorker @JvmOverloads constructor(
             ChunkResult.Retryable
         }
     }
-
-    private fun readChunk(
-        uri: Uri,
-        offset: Long,
-        length: Int,
-    ): ByteArray? =
-        try {
-            applicationContext.contentResolver.openInputStream(uri)?.use { stream ->
-                var skipped = 0L
-                while (skipped < offset) {
-                    val actual = stream.skip(offset - skipped)
-                    if (actual <= 0) break
-                    skipped += actual
-                }
-                val buffer = ByteArray(length)
-                var totalRead = 0
-                while (totalRead < length) {
-                    val read = stream.read(buffer, totalRead, length - totalRead)
-                    if (read == -1) break
-                    totalRead += read
-                }
-                if (totalRead == length) buffer else buffer.copyOf(totalRead)
-            }
-        } catch (_: Exception) {
-            null
-        }
 
     private suspend fun getSavedSessionUrl(fileId: String): String? {
         val key = stringPreferencesKey("session_$fileId")
@@ -473,6 +539,29 @@ class UploadWorker @JvmOverloads constructor(
         }
     }
 
+    private fun updateProgressNotification(
+        fileName: String,
+        progressPercent: Int,
+        notificationId: Int,
+    ) {
+        try {
+            val channelId = NOTIFICATION_CHANNEL_ID
+            val manager = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val notification =
+                NotificationCompat
+                    .Builder(applicationContext, channelId)
+                    .setContentTitle("Mengunggah $fileName")
+                    .setContentText("$progressPercent% selesai")
+                    .setSmallIcon(android.R.drawable.stat_sys_upload)
+                    .setProgress(100, progressPercent, false)
+                    .setOngoing(true)
+                    .setOnlyAlertOnce(true)
+                    .build()
+            manager.notify(notificationId, notification)
+        } catch (_: Exception) {
+        }
+    }
+
     private fun showErrorNotification(
         message: String,
         notificationId: Int,
@@ -552,7 +641,42 @@ class UploadWorker @JvmOverloads constructor(
         const val KEY_TOTAL_BYTES = "total_bytes"
         const val KEY_USER_ID = "user_id"
         const val CHUNK_SIZE = 8 * 1024 * 1024 // 8 MB
+        const val STREAM_BUFFER_SIZE = 64 * 1024 // 64 KB
+        const val SKIP_BUFFER_SIZE = 32 * 1024 // 32 KB
+        const val PROGRESS_THROTTLE_MS = 120L
+        const val NOTIFICATION_THROTTLE_MS = 500L
         const val NOTIFICATION_CHANNEL_ID = "spacebridge_upload_channel"
+
+        private val defaultHttpClient: OkHttpClient by lazy {
+            OkHttpClient
+                .Builder()
+                .connectTimeout(30, TimeUnit.SECONDS)
+                .readTimeout(120, TimeUnit.SECONDS)
+                .writeTimeout(60, TimeUnit.SECONDS)
+                .build()
+        }
+
+        fun skipFully(
+            input: InputStream,
+            bytesToSkip: Long,
+        ): Boolean {
+            if (bytesToSkip <= 0L) return true
+            var remaining = bytesToSkip
+            var skipBuffer: ByteArray? = null
+            while (remaining > 0L) {
+                val skipped = input.skip(remaining)
+                if (skipped > 0L) {
+                    remaining -= skipped
+                } else {
+                    val buf = skipBuffer ?: ByteArray(SKIP_BUFFER_SIZE).also { skipBuffer = it }
+                    val toRead = minOf(buf.size.toLong(), remaining).toInt()
+                    val read = input.read(buf, 0, toRead)
+                    if (read == -1) return false
+                    remaining -= read
+                }
+            }
+            return true
+        }
 
         fun createWorkRequest(
             fileId: String,

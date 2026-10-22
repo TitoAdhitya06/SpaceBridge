@@ -73,3 +73,5 @@ test_screen.png
 # Internal design documents & specifications
 docs/
 /docs/
+DESIGN.md
+STITCH_IMPLEMENTATION_PLAN.md

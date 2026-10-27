@@ -112,7 +112,7 @@ class UploadWorker @JvmOverloads constructor(
                     }
                     is SessionInitResult.Retryable -> {
                         android.util.Log.w("UploadWorker", "Retryable session init error, attempt=$runAttemptCount")
-                        if (runAttemptCount < 3) {
+                        if (runAttemptCount < MAX_RETRY_ATTEMPTS) {
                             return@withContext Result.retry()
                         } else {
                             updateFirestoreFileStatus(userId, fileId, "failed")
@@ -126,29 +126,42 @@ class UploadWorker @JvmOverloads constructor(
             android.util.Log.d("UploadWorker", "sessionUrl obtained: $sessionUrl, isResumed=${sessionSuccess.isResumed}")
 
             // Cek posisi byte terakhir hanya jika melanjutkan sesi lama
-            var startByte =
-                if (sessionSuccess.isResumed) {
-                    queryCurrentPosition(sessionUrl, totalBytes)
-                } else {
-                    0L
-                }
-
-            if (startByte < 0L) {
-                // Sesi lama sudah kedaluwarsa (404), buat sesi baru langsung tanpa menunggu backoff retry
-                android.util.Log.w("UploadWorker", "startByte < 0, clearing expired session and creating new session")
-                clearSavedSessionUrl(fileId)
-                sessionSuccess =
-                    when (val reinitResult = getOrInitiateSession(fileId, fileName, mimeType, totalBytes, userId)) {
-                        is SessionInitResult.Success -> reinitResult
-                        is SessionInitResult.Fatal -> {
-                            updateFirestoreFileStatus(userId, fileId, "failed")
-                            showErrorNotification(reinitResult.message, notificationId)
-                            return@withContext Result.failure()
-                        }
-                        is SessionInitResult.Retryable -> return@withContext Result.retry()
+            var startByte = 0L
+            if (sessionSuccess.isResumed) {
+                when (val posResult = queryCurrentPosition(sessionUrl, totalBytes)) {
+                    is PositionQueryResult.Incomplete -> {
+                        startByte = posResult.nextByte
                     }
-                sessionUrl = sessionSuccess.sessionUrl
-                startByte = 0L
+                    is PositionQueryResult.Completed -> {
+                        setProgress(workDataOf("progress" to 1.0f))
+                        updateFirestoreFileSuccess(userId, fileId, posResult.driveFileId, posResult.webViewLink)
+                        clearSavedSessionUrl(fileId)
+                        showSuccessNotification(fileName, notificationId)
+                        return@withContext Result.success()
+                    }
+                    is PositionQueryResult.Expired -> {
+                        // Sesi lama kedaluwarsa, inisiasi sesi baru tanpa jeda backoff
+                        android.util.Log.w("UploadWorker", "Session expired, clearing and creating new session")
+                        clearSavedSessionUrl(fileId)
+                        sessionSuccess =
+                            when (val reinitResult = getOrInitiateSession(fileId, fileName, mimeType, totalBytes, userId)) {
+                                is SessionInitResult.Success -> reinitResult
+                                is SessionInitResult.Fatal -> {
+                                    updateFirestoreFileStatus(userId, fileId, "failed")
+                                    showErrorNotification(reinitResult.message, notificationId)
+                                    return@withContext Result.failure()
+                                }
+                                is SessionInitResult.Retryable -> return@withContext Result.retry()
+                            }
+                        sessionUrl = sessionSuccess.sessionUrl
+                        startByte = 0L
+                    }
+                    is PositionQueryResult.Retryable -> {
+                        // Tunda eksekusi jika pengecekan posisi gagal akibat gangguan jaringan sementara
+                        android.util.Log.w("UploadWorker", "Position query failed transiently, scheduling retry")
+                        return@withContext Result.retry()
+                    }
+                }
             }
 
             val initialRatio =
@@ -157,9 +170,18 @@ class UploadWorker @JvmOverloads constructor(
                 } else {
                     0f
                 }
+            val initialPercent =
+                if (totalBytes > 0L) {
+                    ((startByte * 100) / totalBytes).toInt().coerceIn(0, 99)
+                } else {
+                    0
+                }
             setProgress(workDataOf("progress" to initialRatio))
+            if (initialPercent > 0) {
+                updateProgressNotification(fileName, initialPercent, notificationId)
+            }
 
-            // Alirkan isi berkas secara berkesinambungan dalam satu stream PUT resumable
+            // Alirkan sisa byte berkas melalui sesi resumable upload
             var currentOffset = startByte
             while (currentOffset < totalBytes) {
                 val chunkResult =
@@ -199,17 +221,36 @@ class UploadWorker @JvmOverloads constructor(
                         return@withContext Result.failure()
                     }
                     is ChunkResult.Retryable -> {
-                        val queriedOffset = queryCurrentPosition(sessionUrl, totalBytes)
-                        if (queriedOffset > currentOffset && queriedOffset < totalBytes) {
-                            currentOffset = queriedOffset
-                            val progressRatio = (currentOffset.toFloat() / totalBytes).coerceIn(0f, 0.99f)
-                            setProgress(workDataOf("progress" to progressRatio))
-                        } else {
-                            return@withContext Result.retry()
+                        when (val posResult = queryCurrentPosition(sessionUrl, totalBytes)) {
+                            is PositionQueryResult.Completed -> {
+                                setProgress(workDataOf("progress" to 1.0f))
+                                updateFirestoreFileSuccess(userId, fileId, posResult.driveFileId, posResult.webViewLink)
+                                clearSavedSessionUrl(fileId)
+                                showSuccessNotification(fileName, notificationId)
+                                return@withContext Result.success()
+                            }
+                            is PositionQueryResult.Incomplete -> {
+                                if (posResult.nextByte > currentOffset && posResult.nextByte < totalBytes) {
+                                    currentOffset = posResult.nextByte
+                                    val progressRatio = (currentOffset.toFloat() / totalBytes).coerceIn(0f, 0.99f)
+                                    val progressPercent = ((currentOffset * 100) / totalBytes).toInt().coerceIn(0, 99)
+                                    setProgress(workDataOf("progress" to progressRatio))
+                                    updateProgressNotification(fileName, progressPercent, notificationId)
+                                } else {
+                                    return@withContext Result.retry()
+                                }
+                            }
+                            is PositionQueryResult.Expired -> {
+                                clearSavedSessionUrl(fileId)
+                                return@withContext Result.retry()
+                            }
+                            is PositionQueryResult.Retryable -> {
+                                return@withContext Result.retry()
+                            }
                         }
                     }
                     is ChunkResult.FatalError -> {
-                        if (runAttemptCount < 3) {
+                        if (runAttemptCount < MAX_RETRY_ATTEMPTS) {
                             return@withContext Result.retry()
                         }
                         updateFirestoreFileStatus(userId, fileId, "failed")
@@ -295,7 +336,7 @@ class UploadWorker @JvmOverloads constructor(
     private fun queryCurrentPosition(
         sessionUrl: String,
         totalBytes: Long,
-    ): Long {
+    ): PositionQueryResult {
         val emptyBody = ByteArray(0).toRequestBody(null)
         val request =
             Request
@@ -305,20 +346,26 @@ class UploadWorker @JvmOverloads constructor(
                 .header("Content-Range", "bytes */$totalBytes")
                 .build()
 
-        try {
+        return try {
             httpClient.newCall(request).execute().use { response ->
-                return when (response.code) {
+                when (response.code) {
                     308 -> {
                         val range = response.header("Range")
-                        parseNextByteFromRange(range)
+                        PositionQueryResult.Incomplete(parseNextByteFromRange(range))
                     }
-                    200, 201 -> totalBytes
-                    404 -> -1L
-                    else -> 0L
+                    200, 201 -> {
+                        val bodyStr = response.body?.string().orEmpty()
+                        val json = if (bodyStr.isNotBlank()) JSONObject(bodyStr) else JSONObject()
+                        val driveId = json.optString("id")
+                        val link = json.optString("webViewLink")
+                        PositionQueryResult.Completed(driveId, link)
+                    }
+                    404, 410 -> PositionQueryResult.Expired
+                    else -> PositionQueryResult.Retryable
                 }
             }
         } catch (_: IOException) {
-            return 0L
+            PositionQueryResult.Retryable
         }
     }
 
@@ -334,6 +381,7 @@ class UploadWorker @JvmOverloads constructor(
         val endByte = totalBytes - 1
         val contentLength = totalBytes - startByte
         var lastReportedPercent = if (totalBytes > 0L) ((startByte * 100) / totalBytes).toInt() else 0
+        var lastReportedRatio = if (totalBytes > 0L) (startByte.toFloat() / totalBytes) else 0f
         var lastProgressUpdateMs = 0L
         var lastNotificationUpdateMs = 0L
 
@@ -364,16 +412,20 @@ class UploadWorker @JvmOverloads constructor(
 
                             if (totalBytes > 0L) {
                                 val currentTotal = startByte + bytesSent
+                                val ratio = (currentTotal.toFloat() / totalBytes).coerceIn(0f, 0.99f)
                                 val percent = ((currentTotal * 100) / totalBytes).toInt().coerceIn(0, 99)
                                 val now = System.currentTimeMillis()
-                                if (percent > lastReportedPercent && now - lastProgressUpdateMs >= PROGRESS_THROTTLE_MS) {
-                                    lastReportedPercent = percent
+                                val hasMeaningfulStep = percent > lastReportedPercent || (ratio - lastReportedRatio) >= 0.002f
+                                if (hasMeaningfulStep && now - lastProgressUpdateMs >= PROGRESS_THROTTLE_MS) {
+                                    lastReportedRatio = ratio
                                     lastProgressUpdateMs = now
-                                    val ratio = (currentTotal.toFloat() / totalBytes).coerceIn(0f, 0.99f)
                                     setProgressAsync(workDataOf("progress" to ratio))
-                                    if (now - lastNotificationUpdateMs >= NOTIFICATION_THROTTLE_MS) {
+                                    if (percent > lastReportedPercent && now - lastNotificationUpdateMs >= NOTIFICATION_THROTTLE_MS) {
+                                        lastReportedPercent = percent
                                         lastNotificationUpdateMs = now
                                         updateProgressNotification(fileName, percent, notificationId)
+                                    } else if (percent > lastReportedPercent) {
+                                        lastReportedPercent = percent
                                     }
                                 }
                             }
@@ -632,6 +684,21 @@ class UploadWorker @JvmOverloads constructor(
         data object FatalError : ChunkResult
     }
 
+    private sealed interface PositionQueryResult {
+        data class Incomplete(
+            val nextByte: Long,
+        ) : PositionQueryResult
+
+        data class Completed(
+            val driveFileId: String,
+            val webViewLink: String,
+        ) : PositionQueryResult
+
+        data object Expired : PositionQueryResult
+
+        data object Retryable : PositionQueryResult
+    }
+
     companion object {
         const val TAG_UPLOAD = "spacebridge_upload"
         const val KEY_FILE_ID = "file_id"
@@ -645,6 +712,7 @@ class UploadWorker @JvmOverloads constructor(
         const val SKIP_BUFFER_SIZE = 32 * 1024 // 32 KB
         const val PROGRESS_THROTTLE_MS = 120L
         const val NOTIFICATION_THROTTLE_MS = 500L
+        const val MAX_RETRY_ATTEMPTS = 10
         const val NOTIFICATION_CHANNEL_ID = "spacebridge_upload_channel"
 
         private val defaultHttpClient: OkHttpClient by lazy {

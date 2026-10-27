@@ -8,7 +8,7 @@ SpaceBridge adalah aplikasi Android modern berbasis Jetpack Compose yang mengint
 
 - **Manajemen Catatan Hibrida**: Mendukung catatan teks naratif dan daftar tugas interaktif (*checklist*) dengan indikator progres penyelesaian.
 - **Katalog dan Sinkronisasi Berkas Google Drive**: Mengelola berkas yang diunggah ke Google Drive dalam ruang folder `/SpaceBridge`, pemantauan kuota penyimpanan, serta opsi unduh lokal, bagikan, dan hapus berkas.
-- **Unggah Latar Belakang Tangguh**: Menggunakan AndroidX WorkManager dengan metode *chunked resumable upload* (8 MB per bagian) sehingga proses unggah dapat dilanjutkan kembali jika koneksi terputus.
+- **Unggah Latar Belakang Tangguh**: Menggunakan AndroidX WorkManager dengan metode *buffered streaming resumable upload* (buffer 64 KB) dan pemantauan progres *real-time* sehingga proses unggah tetap hemat memori dan dapat dilanjutkan kembali dari posisi byte terakhir jika koneksi terputus.
 - **Offline-First dan Realtime Sync**: Menggunakan Cloud Firestore dengan *offline persistence*. Perubahan data saat offline akan otomatis disinkronkan ke server begitu perangkat terhubung kembali ke jaringan.
 - **Antarmuka Responsif dan Adaptif**: Layout otomatis menyesuaikan orientasi potret, lanskap, maupun layar lebar/tablet dengan pilihan tampilan kisi bertingkat (*staggered grid*) atau daftar baris (*list view*).
 - **Sistem Tema Warm Paper & Charcoal**: Mendukung mode terang (*warm paper*) dan mode gelap (*warm charcoal*) yang dapat mengikuti setelan sistem operasi atau dipilih secara manual.
